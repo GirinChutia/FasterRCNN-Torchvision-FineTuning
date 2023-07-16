@@ -6,6 +6,8 @@ import numpy as np
 from collections import defaultdict
 from torchvision import ops
 import matplotlib.patches as patches
+from torchvision import transforms as T
+from PIL import Image
 
 COCOBox_base = namedtuple('COCOBox', ['xmin', 'ymin', 'width', 'height'])
 VOCBox_base = namedtuple('VOCBox', ['xmin', 'ymin', 'xmax', 'ymax'])
@@ -76,7 +78,13 @@ class CocoDataset(Dataset):
                 self.cats_id2label[i['id']] = i['name']
                 self.label_names.append(i['name'])
         if first_label_id > 1:
-            raise AssertionError("Something went wrong!")
+            raise AssertionError("Something went wrong in categories, check the annotation file!")
+    
+    def get_total_classes_count(self):
+        return len(self.cats_id2label)
+    
+    def get_classnames(self):
+        return [v for k,v in self.cats_id2label.items()]
     
     def load_images_annotations(self,index):
         image_info = self.image_ids[index]
@@ -84,9 +92,10 @@ class CocoDataset(Dataset):
                                   image_info['file_name'])
         
         image = cv2.imread(image_path)
-        rimage = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32) # convert BGR to RGB color format
+        rimage = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) #.astype(np.float32) # convert BGR to RGB color format
         rimage = cv2.resize(rimage, (self.width, self.height))
-        rimage /= 255.0
+        # rimage /= 255.0
+        rimage = Image.fromarray(rimage)
         
         image_height, image_width = image_info['height'],image_info['width'] # original height & width
         anno_info = self.annotation_ids[index]
@@ -168,7 +177,7 @@ class CocoDataset(Dataset):
             image_resized = sample['image']
             target['boxes'] = torch.Tensor(sample['bboxes'])
             
-        return image_resized, target
+        return T.ToTensor()(image_resized), target
 
     def __len__(self):
         return len(self.all_images)
