@@ -3,6 +3,9 @@ from time import sleep
 from utils.dataset import CocoDataset
 from utils.model import create_model
 import torch
+import os
+from datetime import datetime
+from torch.utils.tensorboard import SummaryWriter
 
 def get_datasets():
     
@@ -17,7 +20,15 @@ def get_datasets():
     return train_ds, val_ds
     
 
-def train(train_dataset, val_dataset, epochs =2, batch_size=8):
+def train(train_dataset, val_dataset, epochs =2, batch_size=8, exp_folder='exp'):
+
+    date_string = "16-07-2023-10-30-45"
+    date_format = "%d-%m-%Y-%H-%M-%S"
+    datetime_obj = datetime.strptime(date_string, date_format)
+    date_string = datetime_obj.strftime(date_format)
+
+    writer = SummaryWriter(os.path.join('exp', "summary",date_string))
+    writer.add_hparams({'epochs':epochs, 'batch_size' : batch_size, 'experiment_folder':exp_folder},{})
     
     def custom_collate(data):
         return data
@@ -89,6 +100,13 @@ def train(train_dataset, val_dataset, epochs =2, batch_size=8):
                                    boxreg_loss = _loss_box_reg, 
                                    obj_loss = _loss_objectness,
                                    rpn_boxreg_loss=_loss_rpn_box_reg)
+            
+            writer.add_scalar("Train/total_loss", epoch_loss, epoch)
+            writer.add_scalar("Train/classifier_loss", _classifier_loss, epoch)
+            writer.add_scalar("Train/box_reg_loss", _loss_box_reg, epoch)
+            writer.add_scalar("Train/objectness_loss", _loss_objectness, epoch)
+            writer.add_scalar("Train/rpn_box_reg_loss", _loss_rpn_box_reg, epoch)
+            
             sleep(0.1)
 
 if __name__ == '__main__':
