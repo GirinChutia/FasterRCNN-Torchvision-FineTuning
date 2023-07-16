@@ -91,27 +91,33 @@ class CocoDataset(Dataset):
         image_height, image_width = image_info['height'],image_info['width'] # original height & width
         anno_info = self.annotation_ids[index]
         
-        boxes = []
-        labels_id = []
-        
-        for ainfo in anno_info:
-            xmin,ymin,w,h = ainfo['bbox']
-            xmax,ymax = xmin+w, ymin+h
+        if len(anno_info) == 0: # for negative images (Images without annotations)
+            boxes = torch.zeros((0, 4), dtype=torch.float32)
+            labels = torch.zeros((0, 1), dtype=torch.int64)
+            iscrowd = torch.zeros((boxes.shape[0],), dtype=torch.int64)
+            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        else:
+            boxes = []
+            labels_id = []
             
-            xmin_final = (xmin/image_width)*self.width
-            xmax_final = (xmax/image_width)*self.width
-            ymin_final = (ymin/image_height)*self.height
-            ymax_final = (ymax/image_height)*self.height
-            
-            category_id = ainfo['category_id']
-            
-            boxes.append([xmin_final, ymin_final, xmax_final, ymax_final]) 
-            labels_id.append(category_id)
-            
-        boxes = torch.as_tensor(boxes, dtype=torch.float32)  # bounding box to tensor
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0]) # area of the bounding boxes
-        iscrowd = torch.zeros((boxes.shape[0],), dtype=torch.int64) # no crowd instances
-        labels = torch.as_tensor(labels_id, dtype=torch.int64) # labels to tensor
+            for ainfo in anno_info:
+                xmin,ymin,w,h = ainfo['bbox']
+                xmax,ymax = xmin+w, ymin+h
+                
+                xmin_final = (xmin/image_width)*self.width
+                xmax_final = (xmax/image_width)*self.width
+                ymin_final = (ymin/image_height)*self.height
+                ymax_final = (ymax/image_height)*self.height
+                
+                category_id = ainfo['category_id']
+                
+                boxes.append([xmin_final, ymin_final, xmax_final, ymax_final]) 
+                labels_id.append(category_id)
+                
+            boxes = torch.as_tensor(boxes, dtype=torch.float32)  # bounding box to tensor
+            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0]) # area of the bounding boxes
+            iscrowd = torch.zeros((boxes.shape[0],), dtype=torch.int64) # no crowd instances
+            labels = torch.as_tensor(labels_id, dtype=torch.int64) # labels to tensor
         
         # final `target` dictionary
         target = {}
@@ -151,9 +157,6 @@ class CocoDataset(Dataset):
     def __getitem__(self, idx):
         
         sample = self.load_images_annotations(idx)
-        
-        
-        
         image_resized = sample['image']
         target = sample['target']
 
