@@ -180,4 +180,4 @@ class CocoDataset(Dataset):
         return T.ToTensor()(image_resized), target
 
     def __len__(self):
-        return len(self.all_images)
+        return len(self.image_ids)
