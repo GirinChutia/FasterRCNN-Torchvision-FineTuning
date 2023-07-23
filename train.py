@@ -8,6 +8,35 @@ import time
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
+class SaveBestModel:
+    """
+    Class to save the best model while training. If the current epoch's 
+    validation loss is less than the previous least less, then save the
+    model state.
+    """
+    def __init__(
+        self, best_valid_loss=float('inf'), output_dir = 'weight_outputs',
+    ):
+        self.best_valid_loss = best_valid_loss
+    
+        os.makedirs(output_dir,exist_ok=True)
+        
+        self.output_dir = output_dir
+        
+    def __call__(
+        self, current_valid_loss, 
+        epoch, model, optimizer
+    ):
+        if current_valid_loss < self.best_valid_loss:
+            self.best_valid_loss = current_valid_loss
+            print(f"\nBest validation loss: {self.best_valid_loss}")
+            print(f"\nSaving best model for epoch: {epoch+1}\n")
+            torch.save({
+                'epoch': epoch+1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                }, f'{self.output_dir}/best_model.pth')
+
 
 def get_datasets():
 
@@ -177,6 +206,7 @@ def train(
     )
 
     num_epochs = epochs
+    save_best_model = SaveBestModel()
 
     for epoch in range(num_epochs):
 
@@ -202,6 +232,13 @@ def train(
                 log=True,
             )
             sleep(0.1)
+            
+            save_best_model(val_epoch_loss, 
+                            epoch, 
+                            faster_rcnn_model, 
+                            optimizer)
+            
+            sleep(0.1)
 
     _, _ = val_one_epoch(
         faster_rcnn_model, val_dl, writer, epoch + 1, num_epochs, device, log=False
@@ -215,4 +252,4 @@ def train(
 
 if __name__ == "__main__":
     train_ds, val_ds = get_datasets()
-    train(train_ds, val_ds, epochs=2, batch_size=6)
+    train(train_ds, val_ds, epochs=15, batch_size=6)
