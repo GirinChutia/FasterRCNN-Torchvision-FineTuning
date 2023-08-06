@@ -2,162 +2,14 @@ from tqdm import tqdm
 from time import sleep
 from utils.dataset import CocoDataset
 from utils.model import create_model
+from utils.training_utils import SaveBestModel,train_one_epoch,val_one_epoch,get_datasets
 import torch
 import os
 import time
 from datetime import datetime
+from dataclasses import dataclass
+from simple_parsing import ArgumentParser
 from torch.utils.tensorboard import SummaryWriter
-
-class SaveBestModel:
-    """
-    Class to save the best model while training. If the current epoch's 
-    validation loss is less than the previous least less, then save the
-    model state.
-    """
-    def __init__(
-        self, best_valid_loss=float('inf'), output_dir = 'weight_outputs',
-    ):
-        self.best_valid_loss = best_valid_loss
-    
-        os.makedirs(output_dir,exist_ok=True)
-        
-        self.output_dir = output_dir
-        
-    def __call__(
-        self, current_valid_loss, 
-        epoch, model, optimizer
-    ):
-        if current_valid_loss < self.best_valid_loss:
-            self.best_valid_loss = current_valid_loss
-            print(f"\nBest validation loss: {self.best_valid_loss}")
-            print(f"\nSaving best model for epoch: {epoch+1}\n")
-            torch.save({
-                'epoch': epoch+1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                }, f'{self.output_dir}/best_model.pth')
-
-
-def get_datasets():
-
-    train_ds = CocoDataset(
-        image_folder=r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\images",
-        annotations_file=r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\_annotations.coco_neg.json",
-        height=640,
-        width=640,
-    )
-
-    val_ds = CocoDataset(
-        image_folder=r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\images",
-        annotations_file=r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\_annotations.coco_neg.json",
-        height=640,
-        width=640,
-    )
-
-    return train_ds, val_ds
-
-
-def train_one_epoch(model, train_dl, optimizer, writer, epoch_no, total_epoch, device):
-    with tqdm(train_dl, unit="batch") as tepoch:
-        epoch_loss = 0
-        _classifier_loss = 0
-        _loss_box_reg = 0
-        _loss_rpn_box_reg = 0
-        _loss_objectness = 0
-        for data in tepoch:
-            tepoch.set_description(f"Train:Epoch {epoch_no}/{total_epoch}")
-            imgs = []
-            targets = []
-            for d in data:
-                imgs.append(d[0].to(device))
-                targ = {}
-                targ["boxes"] = d[1]["boxes"].to(device)
-                targ["labels"] = d[1]["labels"].to(device)
-                targets.append(targ)
-            loss_dict = model(imgs, targets)
-
-            loss = sum(v for v in loss_dict.values())
-            classifier_loss = loss_dict.get("loss_classifier").cpu().detach().numpy()
-            loss_box_reg = loss_dict.get("loss_box_reg").cpu().detach().numpy()
-            loss_objectness = loss_dict.get("loss_objectness").cpu().detach().numpy()
-            loss_rpn_box_reg = loss_dict.get("loss_rpn_box_reg").cpu().detach().numpy()
-
-            epoch_loss += loss.cpu().detach().numpy()
-            _classifier_loss += classifier_loss
-            _loss_box_reg += loss_box_reg
-            _loss_objectness += loss_objectness
-            _loss_rpn_box_reg += loss_rpn_box_reg
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            tepoch.set_postfix(
-                total_loss=epoch_loss,
-                loss_classifier=_classifier_loss,
-                boxreg_loss=_loss_box_reg,
-                obj_loss=_loss_objectness,
-                rpn_boxreg_loss=_loss_rpn_box_reg,
-            )
-
-        writer.add_scalar("Train/total_loss", epoch_loss, epoch_no)
-        writer.add_scalar("Train/classifier_loss", _classifier_loss, epoch_no)
-        writer.add_scalar("Train/box_reg_loss", _loss_box_reg, epoch_no)
-        writer.add_scalar("Train/objectness_loss", _loss_objectness, epoch_no)
-        writer.add_scalar("Train/rpn_box_reg_loss", _loss_rpn_box_reg, epoch_no)
-
-    return model, optimizer, writer, epoch_loss
-
-
-@torch.inference_mode()
-def val_one_epoch(model, val_dl, writer, epoch_no, total_epoch, device, log=True):
-    with tqdm(val_dl, unit="batch") as tepoch:
-        epoch_loss = 0
-        _classifier_loss = 0
-        _loss_box_reg = 0
-        _loss_rpn_box_reg = 0
-        _loss_objectness = 0
-        for data in tepoch:
-            tepoch.set_description(f"Val:Epoch {epoch_no}/{total_epoch}")
-            imgs = []
-            targets = []
-            for d in data:
-                imgs.append(d[0].to(device))
-                targ = {}
-                targ["boxes"] = d[1]["boxes"].to(device)
-                targ["labels"] = d[1]["labels"].to(device)
-                targets.append(targ)
-            loss_dict = model(imgs, targets)
-
-            loss = sum(v for v in loss_dict.values())
-            classifier_loss = loss_dict.get("loss_classifier").cpu().detach().numpy()
-            loss_box_reg = loss_dict.get("loss_box_reg").cpu().detach().numpy()
-            loss_objectness = loss_dict.get("loss_objectness").cpu().detach().numpy()
-            loss_rpn_box_reg = loss_dict.get("loss_rpn_box_reg").cpu().detach().numpy()
-
-            epoch_loss += loss.cpu().detach().numpy()
-            _classifier_loss += classifier_loss
-            _loss_box_reg += loss_box_reg
-            _loss_objectness += loss_objectness
-            _loss_rpn_box_reg += loss_rpn_box_reg
-
-            tepoch.set_postfix(
-                total_loss=epoch_loss,
-                loss_classifier=_classifier_loss,
-                boxreg_loss=_loss_box_reg,
-                obj_loss=_loss_objectness,
-                rpn_boxreg_loss=_loss_rpn_box_reg,
-            )
-
-        if log:
-            writer.add_scalar("Val/total_loss", epoch_loss, epoch_no)
-            writer.add_scalar("Val/classifier_loss", _classifier_loss, epoch_no)
-            writer.add_scalar("Val/box_reg_loss", _loss_box_reg, epoch_no)
-            writer.add_scalar("Val/objectness_loss", _loss_objectness, epoch_no)
-            writer.add_scalar("Val/rpn_box_reg_loss", _loss_rpn_box_reg, epoch_no)
-
-    return writer, epoch_loss
-
 
 def train(
     train_dataset,
@@ -249,7 +101,32 @@ def train(
         {"Train/total_loss": epoch_loss, "Val/total_loss": val_epoch_loss},
     )
 
+@dataclass
+class DatasetPaths:
+    train_image_dir: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\images"
+    val_image_dir: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\images"
+    train_coco_json: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\_annotations.coco_neg.json"
+    val_coco_json: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\_annotations.coco_neg.json"
+
+@dataclass
+class TrainingConfig:
+    epochs: int = 15
+    batch_size: int = 6
 
 if __name__ == "__main__":
-    train_ds, val_ds = get_datasets()
-    train(train_ds, val_ds, epochs=15, batch_size=6)
+    
+    parser = ArgumentParser()
+    parser.add_arguments(DatasetPaths,dest='dataset_config')
+    parser.add_arguments(TrainingConfig,dest='training_config')
+    args = parser.parse_args()
+    
+    dataset_config: DatasetPaths = args.dataset_config
+    training_config: TrainingConfig = args.training_config
+    
+    train_ds, val_ds = get_datasets(train_image_dir=dataset_config.train_image_dir,
+                                    train_coco_json=dataset_config.train_coco_json,
+                                    val_image_dir=dataset_config.val_image_dir,
+                                    val_coco_json=dataset_config.val_coco_json)
+    train(train_ds, val_ds, 
+          epochs=training_config.epochs, 
+          batch_size=training_config.batch_size)

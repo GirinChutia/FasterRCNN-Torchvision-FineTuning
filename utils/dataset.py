@@ -156,6 +156,18 @@ class CocoDataset(Dataset):
             "width": image_width,
             "target": target,
         }
+    
+    @staticmethod
+    def transform_image_for_inference(image_path,width,height):
+        image = cv2.imread(image_path)
+        rimage = cv2.cvtColor(
+            image, cv2.COLOR_BGR2RGB
+        )
+        rimage = cv2.resize(rimage, (width,height))
+        rimage = Image.fromarray(rimage)
+        rimage = T.ToTensor()(rimage)
+        # rimage = torch.unsqueeze(rimage, 0)
+        return rimage # this can directly go to model for inference
 
     @staticmethod
     def display_bbox(
