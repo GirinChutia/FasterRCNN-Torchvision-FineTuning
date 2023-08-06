@@ -7,7 +7,7 @@ import torch
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
-
+import matplotlib.patches as patches
 
 class InferFasterRCNN:
     def __init__(self, num_classes=None, classnames=[]):
@@ -33,14 +33,21 @@ class InferFasterRCNN:
         )
         self.model = self.model.eval()
 
-    def infer_image(self, image, detection_threshold=0.5, visualize=False):
-
-        orig_image = copy.deepcopy(image)
+    def infer_image(self, transform_info ,detection_threshold=0.5, visualize=False):
+        
+        '''
+        image : original unscaled image
+        '''
+        
+        display_unscaled = True
+        h_ratio = transform_info['original_height']/transform_info['resized_height']
+        w_ratio = transform_info['original_width']/transform_info['resized_width']
+        
+        orig_image = transform_info['resized_image']
         orig_image = orig_image.cpu().numpy()
         orig_image = np.transpose(orig_image, (1, 2, 0))
         orig_image = np.ascontiguousarray(orig_image, dtype=np.float32)
-
-        image = torch.unsqueeze(image, 0)
+        image = torch.unsqueeze(transform_info['resized_image'], 0)
 
         with torch.no_grad():
             self.model = self.model.to(self.device)
@@ -49,49 +56,91 @@ class InferFasterRCNN:
         # load all detection to CPU for further operations
         outputs = [{k: v.to("cpu") for k, v in t.items()} for t in outputs]
 
+        results = {}
         
         # carry further only if there are detected boxes
         if len(outputs[0]["boxes"]) != 0:
-            boxes = outputs[0]["boxes"].data.numpy()
+            boxes = outputs[0]["boxes"].data.numpy() # xyxy
             scores = outputs[0]["scores"].data.numpy()
-
+            
             # filter out boxes according to `detection_threshold`
             boxes = boxes[scores >= detection_threshold].astype(np.int32)
             draw_boxes = boxes.copy()
-
+            
             # get all the predicited class names
             pred_classes = [
                 self.classnames[i] for i in outputs[0]["labels"].cpu().numpy()
             ]
+            
+            results['unscaled_boxes'] = [[i[0]*w_ratio, i[1]*h_ratio, i[2]*w_ratio, i[3]*h_ratio] for i in boxes] # in original image size
+            results['scaled_boxes'] = boxes # in resize image size
+            results['scores'] = scores
+            results['pred_classes'] = pred_classes
+            results['labels'] = outputs[0]["labels"].cpu().numpy()
 
-            # draw the bounding boxes and write the class name on top of it
-            for j, box in enumerate(draw_boxes):
-                class_name = pred_classes[j]
-                color = self.colors[self.classnames.index(class_name)]
-                cv2.rectangle(
-                    orig_image,
-                    (int(box[0]), int(box[1])),
-                    (int(box[2]), int(box[3])),
-                    color,
-                    2,
-                )
-                cv2.putText(
-                    orig_image,
-                    class_name,
-                    (int(box[0]), int(box[1] - 5)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    color,
-                    2,
-                    lineType=cv2.LINE_AA,
-                )
+            if not display_unscaled:
+                # draw the bounding boxes and write the class name on top of it
+                for j, box in enumerate(draw_boxes):
+                    class_name = pred_classes[j]
+                    color = self.colors[self.classnames.index(class_name)]
+                    cv2.rectangle(
+                        orig_image,
+                        (int(box[0]), int(box[1])),
+                        (int(box[2]), int(box[3])),
+                        color,
+                        2,
+                    )
+                    cv2.putText(
+                        orig_image,
+                        class_name,
+                        (int(box[0]), int(box[1] - 5)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        color,
+                        2,
+                        lineType=cv2.LINE_AA,
+                    )
 
-            if visualize:
-                plt.figure(figsize=(10, 10))
-                plt.imshow(orig_image)  # [:,:,::-1])
-                plt.show()
+                if visualize:
+                    plt.figure(figsize=(10, 10))
+                    plt.imshow(orig_image[:,:,::-1])
+                    plt.show()
+            
+            else:
+                # draw the bounding boxes and write the class name on top of it
+                draw_boxes_scaled = results['unscaled_boxes']
+                scaled_orig_image = transform_info['original_image']
+                scaled_orig_image = scaled_orig_image.cpu().numpy()
+                scaled_orig_image = np.transpose(scaled_orig_image, (1, 2, 0))
+                scaled_orig_image = np.ascontiguousarray(scaled_orig_image, dtype=np.float32)
+                
+                for j, box in enumerate(draw_boxes_scaled):
+                    class_name = pred_classes[j]
+                    color = self.colors[self.classnames.index(class_name)]
+                    cv2.rectangle(
+                        scaled_orig_image,
+                        (int(box[0]), int(box[1])),
+                        (int(box[2]), int(box[3])),
+                        color,
+                        2,
+                    )
+                    cv2.putText(
+                        scaled_orig_image,
+                        class_name,
+                        (int(box[0]), int(box[1] - 5)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        color,
+                        2,
+                        lineType=cv2.LINE_AA,
+                    )
 
-        return outputs,orig_image
+                if visualize:
+                    plt.figure(figsize=(10, 10))
+                    plt.imshow(scaled_orig_image)  # [:,:,::-1])
+                    plt.show()
+
+        return results
 
     def infer_image_path(self, image_path, detection_threshold=0.5, visualize=False):
 
@@ -158,7 +207,7 @@ class InferFasterRCNN:
                 plt.imshow(orig_image[:, :, ::-1])
                 plt.show()
 
-        return outputs,orig_image
+        return outputs
     
     
     def draw_bounding_boxes(self,image, bboxes, class_labels, figsize=(12,12)):
@@ -219,3 +268,54 @@ class SaveBestModel:
                 },
                 f"{self.output_dir}/best_model.pth",
             )
+
+def display_gt_pred(image_path,
+                    gt_boxes,
+                    pred_boxes,
+                    gt_class,
+                    pred_class,
+                    pred_scores,
+                    box_format='xywh',
+                    figsize=(10,10),
+                    classnames = []):
+    
+    line_width = 1
+    gt_color = 'g'
+    pred_color = 'r'
+    img = cv2.imread(image_path)
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.imshow(img[:,:,::-1])
+    
+    for gb,gc in zip(gt_boxes,gt_class):
+        
+        if format == 'xywh':
+            x, y, w, h = gb
+        
+        if box_format == 'xyxy':
+            x1, y1, x2, y2 = gb
+            x,y,w,h = x1,y1,x2-x1,y2-y1
+            
+        rect = patches.Rectangle(
+                (x, y), w, h, linewidth=line_width, edgecolor=gt_color, facecolor="none"
+            )
+        ax.add_patch(rect)
+        
+        if len(classnames)>0:
+            ax.text(x + 5, y + 20, classnames[int(gc)-1], bbox=dict(facecolor="yellow", alpha=0.5))
+        else:
+            ax.text(x + 5, y + 20, gc, bbox=dict(facecolor="yellow", alpha=0.5))
+    
+    for pb,pc,ps in zip(pred_boxes,pred_class,pred_scores):
+        if format == 'xywh':
+            x, y, w, h = pb
+        if box_format == 'xyxy':
+            x1, y1, x2, y2 = pb
+            x,y,w,h = x1,y1,x2-x1,y2-y1
+        rect = patches.Rectangle(
+                (x, y), w, h, linewidth=line_width+1, edgecolor=pred_color, facecolor="none"
+            )
+        ax.add_patch(rect)
+        ax.text(x + 5, y + 40, f'{pc},{round(ps*100,2)}', bbox=dict(facecolor="red", alpha=0.5))
+    
+    plt.axis('off')
+    plt.show()

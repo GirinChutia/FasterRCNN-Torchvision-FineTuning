@@ -1,5 +1,5 @@
 from collections import namedtuple
-import abc, cv2, glob
+import abc, cv2, glob,copy
 import torch, os, json
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
@@ -8,10 +8,10 @@ from torchvision import ops
 import matplotlib.patches as patches
 from torchvision import transforms as T
 from PIL import Image
+import matplotlib.pyplot as plt
 
 COCOBox_base = namedtuple("COCOBox", ["xmin", "ymin", "width", "height"])
 VOCBox_base = namedtuple("VOCBox", ["xmin", "ymin", "xmax", "ymax"])
-
 
 class COCOBox(COCOBox_base):
     def area(self):
@@ -159,7 +159,14 @@ class CocoDataset(Dataset):
     
     @staticmethod
     def transform_image_for_inference(image_path,width,height):
+        
         image = cv2.imread(image_path)
+        ori_h, ori_w, _ = image.shape
+        
+        oimage = copy.deepcopy(image)
+        oimage = Image.fromarray(oimage)
+        oimage = T.ToTensor()(oimage)
+        
         rimage = cv2.cvtColor(
             image, cv2.COLOR_BGR2RGB
         )
@@ -167,7 +174,15 @@ class CocoDataset(Dataset):
         rimage = Image.fromarray(rimage)
         rimage = T.ToTensor()(rimage)
         # rimage = torch.unsqueeze(rimage, 0)
-        return rimage # this can directly go to model for inference
+        
+        transform_info = {'original_width':ori_w,
+                          'original_height':ori_h,
+                          'resized_width':width,
+                          'resized_height':height,
+                          'resized_image':rimage,
+                          'original_image':oimage}
+        
+        return transform_info # this can directly go to model for inference
 
     @staticmethod
     def display_bbox(
