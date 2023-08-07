@@ -24,6 +24,12 @@ To train the Faster RCNN model follow the below steps :
 
     The training weights and tensorboard logs will be saved in experiment folder
 
+    The training and validation logs can be visualized in tensorboard as shown below :
+    > Train logs
+        ![Alt text](utils/train_logs.png)
+    > Val Logs
+        ![Alt text](utils/val_logs.png)
+
 # Inference :
 
 The instruction about inference with a trained model are discussed in ***demo_inference.ipynb*** notebook
