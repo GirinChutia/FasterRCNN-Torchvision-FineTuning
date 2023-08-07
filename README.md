@@ -5,7 +5,7 @@
 Faster RCNN is an object detection model introduced in "Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks" [link] paper.
 
 The architechure of Faster RCNN model is shown below,
-![](image.png)
+![](utils/image.png)
 
 Faster R-CNN, is composed of two modules. The first module is a deep fully convolutional network that proposes regions, and the second module is the Fast R-CNN detector that uses the proposed regions.
 
