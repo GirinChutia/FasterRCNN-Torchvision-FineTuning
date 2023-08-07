@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from dataclasses import dataclass
 from simple_parsing import ArgumentParser
+from eval import evaluate_model
 from torch.utils.tensorboard import SummaryWriter
 
 def train(
@@ -71,9 +72,20 @@ def train(
             num_epochs,
             device,
         )
+        
         sleep(0.1)
 
-        if epoch % val_eval_freq == 0:  # Do evaluation of validation set
+        if (epoch % val_eval_freq == 0) and epoch != 0:  # Do evaluation of validation set
+            eval_result = evaluate_model(image_dir=val_dataset.image_folder,
+                                         gt_ann_file=val_dataset.annotations_file,
+                                         model_weight=save_best_model.model_save_path)
+            
+            sleep(0.1)
+            
+            writer.add_scalar("Val/AP_50_95", eval_result['AP_50_95'], epoch + 1)
+            writer.add_scalar("Val/AP_50", eval_result['AP_50'], epoch + 1)
+        
+        else:
             writer, val_epoch_loss = val_one_epoch(
                 faster_rcnn_model,
                 val_dl,
@@ -83,6 +95,7 @@ def train(
                 device,
                 log=True,
             )
+        
             sleep(0.1)
             
             save_best_model(val_epoch_loss, 
@@ -90,7 +103,6 @@ def train(
                             faster_rcnn_model, 
                             optimizer)
             
-            sleep(0.1)
 
     _, _ = val_one_epoch(
         faster_rcnn_model, val_dl, writer, epoch + 1, num_epochs, device, log=False
@@ -104,14 +116,16 @@ def train(
 @dataclass
 class DatasetPaths:
     train_image_dir: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\images"
-    val_image_dir: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\images"
+    val_image_dir: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\valid\images"
     train_coco_json: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\_annotations.coco_neg.json"
-    val_coco_json: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\train\_annotations.coco_neg.json"
+    val_coco_json: str = r"D:\Work\work\FasterRCNN-Torchvision-FineTuning\dataset\AquariumDataset\valid\_annotations.coco.json"
 
 @dataclass
 class TrainingConfig:
     epochs: int = 15
     batch_size: int = 6
+    val_eval_freq: int = 2
+    exp_folder: str = 'exp'
 
 if __name__ == "__main__":
     
@@ -127,6 +141,9 @@ if __name__ == "__main__":
                                     train_coco_json=dataset_config.train_coco_json,
                                     val_image_dir=dataset_config.val_image_dir,
                                     val_coco_json=dataset_config.val_coco_json)
-    train(train_ds, val_ds, 
+    train(train_ds, val_ds,
           epochs=training_config.epochs, 
-          batch_size=training_config.batch_size)
+          batch_size=training_config.batch_size,
+          val_eval_freq=training_config.val_eval_freq,
+          exp_folder=training_config.exp_folder)
+    
