@@ -10,6 +10,10 @@ The architechure of Faster RCNN model is shown below,
 Faster R-CNN, is composed of two modules. The first module is a deep fully convolutional network that proposes regions, and the second module is the Fast R-CNN detector that uses the proposed regions.
 
 ---
+# Enviroment :
+Create a python or conda environment using ***requirements.txt***
+
+---
 # Training Instructions :
 
 To train the Faster RCNN model follow the below steps :
@@ -30,6 +34,7 @@ To train the Faster RCNN model follow the below steps :
     > Val Logs
         ![Alt text](utils/val_logs.png)
 
+---
 # Inference :
 
 The instruction about inference with a trained model are discussed in ***demo_inference.ipynb*** notebook
