@@ -24,7 +24,8 @@ def train(
     date_format = "%d-%m-%Y-%H-%M-%S"
     date_string = time.strftime(date_format)
 
-    writer = SummaryWriter(os.path.join("exp", "summary", date_string))
+    exp_folder = os.path.join("exp", "summary", date_string)
+    writer = SummaryWriter(exp_folder)
 
     def custom_collate(data):
         return data
@@ -59,7 +60,7 @@ def train(
     )
 
     num_epochs = epochs
-    save_best_model = SaveBestModel()
+    save_best_model = SaveBestModel(output_dir=exp_folder)
 
     for epoch in range(num_epochs):
 
