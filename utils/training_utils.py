@@ -43,6 +43,7 @@ class SaveBestModel:
         self, current_valid_loss, 
         epoch, model, optimizer
     ):
+        self.model_save_path = f'{self.output_dir}/best_model.pth'
         if current_valid_loss < self.best_valid_loss:
             self.best_valid_loss = current_valid_loss
             print(f"\nBest validation loss: {self.best_valid_loss}")
@@ -51,7 +52,7 @@ class SaveBestModel:
                 'epoch': epoch+1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                }, f'{self.output_dir}/best_model.pth')
+                }, self.model_save_path)
 
 @torch.inference_mode()
 def val_one_epoch(model, val_dl, writer, epoch_no, total_epoch, device, log=True):
