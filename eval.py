@@ -84,6 +84,8 @@ def evaluate_model(image_dir,
     AP_50 = cocoEval.stats.tolist()[1]
     
     del IF_C,_ds
+    os.remove(save_json_path)
+    
     torch.cuda.empty_cache()
     gc.collect()
     
