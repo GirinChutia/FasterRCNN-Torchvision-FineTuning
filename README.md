@@ -2,7 +2,7 @@
 
 ---
 # Faster RCNN :
-Faster RCNN is an object detection model introduced in "Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks" [link] paper.
+Faster RCNN is an object detection model introduced in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](https://arxiv.org/abs/1506.01497) paper.
 
 The architechure of Faster RCNN model is shown below,
 ![](utils/image.png)
@@ -26,4 +26,4 @@ To train the Faster RCNN model follow the below steps :
 
 # Inference :
 
-The instruction about inference with the trained model are discussed in demo_inference.ipynb notebook
+The instruction about inference with a trained model are discussed in ***demo_inference.ipynb*** notebook
