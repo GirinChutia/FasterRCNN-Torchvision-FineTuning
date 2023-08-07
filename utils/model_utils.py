@@ -57,26 +57,35 @@ class InferFasterRCNN:
         outputs = [{k: v.to("cpu") for k, v in t.items()} for t in outputs]
 
         results = {}
+        _f_boxes,_f_scores,_f_labels = [],[],[]
         
         # carry further only if there are detected boxes
         if len(outputs[0]["boxes"]) != 0:
             boxes = outputs[0]["boxes"].data.numpy() # xyxy
             scores = outputs[0]["scores"].data.numpy()
+            labels = outputs[0]["labels"].cpu().numpy()
             
             # filter out boxes according to `detection_threshold`
-            boxes = boxes[scores >= detection_threshold].astype(np.int32)
+            for i in range(len(boxes)):
+                if scores[i] >= detection_threshold:
+                    _f_boxes.append(boxes[i])
+                    _f_labels.append(labels[i])
+                    _f_scores.append(scores[i])
+            
+            boxes,labels,scores = _f_boxes,_f_labels,_f_scores
+            #boxes = boxes[scores >= detection_threshold].astype(np.int32)
             draw_boxes = boxes.copy()
             
             # get all the predicited class names
             pred_classes = [
-                self.classnames[i] for i in outputs[0]["labels"].cpu().numpy()
+                self.classnames[i] for i in labels
             ]
             
             results['unscaled_boxes'] = [[i[0]*w_ratio, i[1]*h_ratio, i[2]*w_ratio, i[3]*h_ratio] for i in boxes] # in original image size
             results['scaled_boxes'] = boxes # in resize image size
             results['scores'] = scores
             results['pred_classes'] = pred_classes
-            results['labels'] = outputs[0]["labels"].cpu().numpy()
+            results['labels'] = labels
 
             if not display_unscaled:
                 # draw the bounding boxes and write the class name on top of it
