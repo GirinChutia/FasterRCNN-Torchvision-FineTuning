@@ -1,0 +1,13 @@
+/dataset
+/Count_wheat_spikes_using_finetuned_faster_rcnn.ipynb
+/wheat_spikes_using_faster_rcnn.ipynb
+/test.ipynb
+/utils/detection
+/__pycache__
+/utils/__pycache__
+/exp
+/weight_outputs
+/test.py
+/*.jpg
+weight_outputs_best/best_model.pth
+test_dect.json
