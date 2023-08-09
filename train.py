@@ -10,6 +10,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from simple_parsing import ArgumentParser
 from eval import evaluate_model
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
 def train(
@@ -55,9 +56,24 @@ def train(
     faster_rcnn_model = faster_rcnn_model.to(device)
 
     # Optimizer --
+    pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
+
+    for k, v in faster_rcnn_model.named_modules():
+        if hasattr(v, "bias") and isinstance(v.bias, nn.Parameter):
+            pg2.append(v.bias)  # biases
+        if isinstance(v, nn.BatchNorm2d) or "bn" in k:
+            pg0.append(v.weight)  # no decay
+        elif hasattr(v, "weight") and isinstance(v.weight, nn.Parameter):
+            pg1.append(v.weight)  # apply decay
+
     optimizer = torch.optim.SGD(
-        faster_rcnn_model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005
+        pg0, lr=0.001, momentum=0.9, nesterov=True
     )
+    optimizer.add_param_group(
+        {"params": pg1, "weight_decay":  5e-4}
+    )  # add pg1 with weight_decay
+    optimizer.add_param_group({"params": pg2})
+    
 
     num_epochs = epochs
     save_best_model = SaveBestModel(output_dir=exp_folder)
