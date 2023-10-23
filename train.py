@@ -68,11 +68,13 @@ def train(
 
     optimizer = torch.optim.SGD(
         pg0, lr=0.001, momentum=0.9, nesterov=True
-    )
+    ) # BN
+    
     optimizer.add_param_group(
         {"params": pg1, "weight_decay":  5e-4}
-    )  # add pg1 with weight_decay
-    optimizer.add_param_group({"params": pg2})
+    )  # add pg1 with weight_decay # Weights
+    
+    optimizer.add_param_group({"params": pg2}) # Biases
     
 
     num_epochs = epochs
