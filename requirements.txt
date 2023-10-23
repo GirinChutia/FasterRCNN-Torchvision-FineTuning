@@ -10,3 +10,4 @@ torch==2.0.0+cu117
 torchvision==0.15.1+cu117
 tqdm==4.65.0
 opencv-python-headless==4.6.0.66
+tensorboard==2.13.0
