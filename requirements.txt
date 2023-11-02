@@ -1,13 +1,11 @@
 matplotlib==3.7.1
 numpy==1.23.5
 opencv_python==4.7.0.72
-opencv_python_headless==4.5.4.60
-Pillow==9.3.0
+opencv-python-headless==4.6.0.66
 Pillow==10.0.0
 pycocotools==2.0.6
 simple_parsing==0.1.2.post1
 torch==2.0.0+cu117
 torchvision==0.15.1+cu117
 tqdm==4.65.0
-opencv-python-headless==4.6.0.66
 tensorboard==2.13.0
