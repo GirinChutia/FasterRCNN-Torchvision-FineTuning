@@ -10,15 +10,11 @@ from torchvision import transforms as T
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from model_utils import InferFasterRCNN
+from config import NUM_CLASSES, CLASSNAMES, CHECKPOINT_PATH, IMAGE_SIZE
 
 app = FastAPI()
 
-# Configuration
-CLASSNAMES = ['fish', 'jellyfish', 'penguin', 'puffin', 'shark', 'starfish', 'stingray']
-NUM_CLASSES = len(CLASSNAMES) + 1
-CHECKPOINT_PATH = 'best_model.pth'
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-IMAGE_SIZE = 640
 
 class InferenceResult(BaseModel):
     boxes: List[List[float]]
