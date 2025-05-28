@@ -33,12 +33,31 @@ class InferFasterRCNN:
         )
         self.model = self.model.eval()
 
-    def infer_image(self, transform_info ,detection_threshold=0.5, visualize=False):
-        
-        '''
-        image : original unscaled image
-        '''
-        
+    def infer_image(self, transform_info, detection_threshold=0.5, visualize=False):
+        """
+        Perform inference on a single image using the trained detection model.
+        Args:
+            transform_info (dict): Dictionary containing image transformation information, including:
+                - 'original_image': The original unscaled image (as a tensor).
+                - 'resized_image': The resized image (as a tensor) used for inference.
+                - 'original_height': Height of the original image.
+                - 'original_width': Width of the original image.
+                - 'resized_height': Height of the resized image.
+                - 'resized_width': Width of the resized image.
+            detection_threshold (float, optional): Minimum confidence score for a detection to be considered valid. Defaults to 0.5.
+            visualize (bool, optional): If True, displays the image with detected bounding boxes and class names. Defaults to False.
+        Returns:
+            dict: A dictionary containing detection results with the following keys:
+                - 'unscaled_boxes': List of bounding boxes (in original image size) for detections above the threshold.
+                - 'scaled_boxes': List of bounding boxes (in resized image size) for detections above the threshold.
+                - 'scores': List of confidence scores for each detection.
+                - 'pred_classes': List of predicted class names for each detection.
+                - 'labels': List of predicted class indices for each detection.
+        Notes:
+            - If `visualize` is True, the function will display the image with bounding boxes and class names.
+            - The function automatically rescales bounding boxes to the original image size.
+            - Requires `cv2` and `matplotlib.pyplot` for visualization.
+        """
         display_unscaled = True
         h_ratio = transform_info['original_height']/transform_info['resized_height']
         w_ratio = transform_info['original_width']/transform_info['resized_width']
@@ -78,7 +97,7 @@ class InferFasterRCNN:
             
             # get all the predicited class names
             pred_classes = [
-                self.classnames[i] for i in labels
+                self.classnames[i] for i in labels # Note : in self.classnames, '__background__' is at index 0
             ]
             
             results['unscaled_boxes'] = [[i[0]*w_ratio, i[1]*h_ratio, i[2]*w_ratio, i[3]*h_ratio] for i in boxes] # in original image size

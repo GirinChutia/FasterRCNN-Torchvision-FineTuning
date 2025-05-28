@@ -1,85 +1,152 @@
-from model_utils import InferFasterRCNN
-import torch
-import bentoml
-import cv2
+from fastapi import FastAPI, File, UploadFile, Query, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from typing import List, Tuple, Optional
+import base64
+import io
 from PIL import Image
-import copy
+import torch
 from torchvision import transforms as T
-from pathlib import Path
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from model_utils import InferFasterRCNN
 
-def transform_image_for_inference(image_path,width,height):
-        
-    image = cv2.imread(image_path)
-    ori_h, ori_w, _ = image.shape
-    
-    oimage = copy.deepcopy(image)
-    oimage = Image.fromarray(oimage)
-    oimage = T.ToTensor()(oimage)
-    
-    rimage = cv2.cvtColor(
-        image, cv2.COLOR_BGR2RGB
+app = FastAPI()
+
+# Configuration
+CLASSNAMES = ['fish', 'jellyfish', 'penguin', 'puffin', 'shark', 'starfish', 'stingray']
+NUM_CLASSES = len(CLASSNAMES) + 1
+CHECKPOINT_PATH = 'best_model.pth'
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+IMAGE_SIZE = 640
+
+class InferenceResult(BaseModel):
+    boxes: List[List[float]]
+    scores: List[float]
+    classes: List[int]
+    visualization: Optional[str] = None  # Base64-encoded string if visualize=True
+
+@app.get("/")
+def read_root():
+    return {"message": "Inference API is running."}
+
+@app.on_event('startup')
+async def load_model():
+    """
+    Asynchronous event handler that loads the Faster R-CNN model at application startup.
+
+    This function initializes an instance of `InferFasterRCNN` with the specified number of classes and class names,
+    loads the model weights from the checkpoint path onto the specified device, and attaches the loaded model to the
+    application state for later use in inference endpoints.
+
+    Returns:
+        None
+    """
+    model = InferFasterRCNN(num_classes=NUM_CLASSES, classnames=CLASSNAMES)
+    model.load_model(CHECKPOINT_PATH, device=DEVICE)
+    app.state.model = model
+
+
+def preprocess_image(file_bytes: bytes, size: int = IMAGE_SIZE) -> Tuple[Tuple[int, int], torch.Tensor, torch.Tensor]:
+    """
+    Converts uploaded image bytes into original and resized PyTorch tensors.
+
+    Args:
+        file_bytes (bytes): The image file in bytes format.
+        size (int, optional): The target size for resizing the image (height and width). Defaults to IMAGE_SIZE.
+
+    Returns:
+        Tuple[Tuple[int, int], torch.Tensor, torch.Tensor]:
+            - original_size: A tuple (width, height) representing the original image size.
+            - original: The original image as a PyTorch tensor.
+            - resized: The resized image as a PyTorch tensor with shape (3, size, size).
+    """
+    img = Image.open(io.BytesIO(file_bytes)).convert('RGB')
+    original_size = img.size  # (width, height)
+    to_tensor = T.ToTensor()
+    resized = T.Compose([T.Resize((size, size)), to_tensor])(img)
+    original = to_tensor(img)
+    return original_size, original, resized
+
+
+@app.post('/infer_image', response_model=InferenceResult)
+async def infer_image(
+    file: UploadFile = File(...),
+    visualize: bool = Query(False),
+    threshold: float = Query(0.5, ge=0.0, le=1.0)
+):
+    """
+    Endpoint to perform object detection inference on an uploaded image.
+    Args:
+        file (UploadFile): The image file to be processed.
+        visualize (bool, optional): Whether to return a visualization of detections. Defaults to False.
+        threshold (float, optional): Detection confidence threshold (between 0.0 and 1.0). Defaults to 0.5.
+    Returns:
+        dict: A dictionary containing:
+            - boxes (List[List[float]]): List of bounding boxes [x1, y1, x2, y2] for detected objects.
+            - scores (List[float]): Confidence scores for each detected object.
+            - classes (List[int]): Class indices for each detected object.
+            - visualization (Optional[str]): Base64-encoded PNG image with visualized detections if visualize=True, otherwise None.
+    Raises:
+        HTTPException: If the uploaded file is not a valid image.
+    """
+    # Read bytes and preprocess
+    content = await file.read()
+    try:
+        (orig_w, orig_h), orig_tensor, resized_tensor = preprocess_image(content)
+    except Exception:
+        raise HTTPException(status_code=400, detail='Invalid image file')
+
+    # Perform inference
+    model = app.state.model
+    result = model.infer_image(
+        {
+            'original_width': orig_w,
+            'original_height': orig_h,
+            'resized_width': resized_tensor.size(2),
+            'resized_height': resized_tensor.size(1),
+            'resized_image': resized_tensor,
+            'original_image': orig_tensor,
+        },
+        detection_threshold=threshold,
+        visualize=False
     )
-    rimage = cv2.resize(rimage, (width,height))
-    rimage = Image.fromarray(rimage)
-    rimage = T.ToTensor()(rimage)
-    # rimage = torch.unsqueeze(rimage, 0)
-    
-    transform_info = {'original_width':ori_w,
-                        'original_height':ori_h,
-                        'resized_width':width,
-                        'resized_height':height,
-                        'resized_image':rimage,
-                        'original_image':oimage}
-    
-    return transform_info # this can directly go to model for inference
-    
-@bentoml.service(
-    resources={"gpu": 1, "memory": "4GiB"},
-    traffic={"timeout": 20},
-)
-class InferFasterRCNNService:
-    
-    def __init__(self) -> None:
-        
-        classnames = ['fish', 'jellyfish', 'penguin', 'puffin', 'shark', 'starfish', 'stingray']
-        num_classes = len(classnames)+1
-        checkpoint = r'D:\Work\Build\FasterRCNN-Torchvision-FineTuning\weight_outputs_best\best_model.pth'
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-        self.num_classes = num_classes
-        self.classnames = classnames
-        self.checkpoint = checkpoint
-        self.device = device
-        self.model = InferFasterRCNN(num_classes=num_classes, classnames=classnames)
-        self.model.load_model(checkpoint, device=device)
-        
-    @bentoml.api
-    def infer_image(self, image: Path):
-        transform_info = transform_image_for_inference(image, width=640, height=640)
-        
-        result = self.model.infer_image(transform_info,
-                                      detection_threshold=0.5,
-                                      visualize=False)
-        
-        if len(result) == 0:
-            all_results = {'boxes':[], # XYXY
-                            'scores':[],
-                            'classes':[]}
-        else:
-            pred_boxes = result['unscaled_boxes']
-            pred_classes = result['pred_classes']
-            pred_scores = result['scores']
-            pred_labels = result['labels']
-            
-            pred_boxes = [[float(i[0]),float(i[1]),
-                        float(i[2]),float(i[3])] for i in pred_boxes] # xyxy
-            pred_scores = [float(i) for i in pred_scores]
-            pred_labels = [int(i) for i in pred_labels]
-            
-            all_results = {
-                'boxes':pred_boxes, # XYXY
-                'scores':pred_scores,
-                'classes':pred_labels}
-    
-        return all_results
-        
+    boxes = result.get('unscaled_boxes', [])
+    scores = result.get('scores', [])
+    labels = result.get('labels', [])
+
+    vis_b64 = None
+
+    # Visualization
+    if visualize:
+        img = Image.open(io.BytesIO(content)).convert('RGB')
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.imshow(img)
+        for box, label, score in zip(boxes, labels, scores):
+            x1, y1, x2, y2 = box
+            rect = patches.Rectangle((x1, y1), x2 - x1, y2 - y1,
+                                     linewidth=2, edgecolor='red', facecolor='none')
+            ax.add_patch(rect)
+            ax.text(x1, y1 - 5, f"{CLASSNAMES[int(label)-1]} {score:.2f}",
+                    color='white', bbox=dict(facecolor='red', alpha=0.5))
+        ax.axis('off')
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+        plt.close(fig)
+        buf.seek(0)
+
+        # Encode image as base64 string
+        vis_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    # Format JSON response
+    cleaned_boxes = [[float(coord) for coord in box] for box in boxes]
+    cleaned_scores = [float(s) for s in scores]
+    cleaned_labels = [int(l) for l in labels]
+
+    return {
+        "boxes": cleaned_boxes,
+        "scores": cleaned_scores,
+        "classes": cleaned_labels,
+        "visualization": vis_b64  # Will be None if visualize=False
+    }
